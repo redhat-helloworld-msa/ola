@@ -28,7 +28,6 @@ import org.apache.http.impl.client.HttpClients;
 import org.keycloak.KeycloakPrincipal;
 import org.keycloak.adapters.RefreshableKeycloakSecurityContext;
 import org.keycloak.representations.AccessToken;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
@@ -36,25 +35,24 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
-import com.github.kristofa.brave.Brave;
-import com.github.kristofa.brave.ServerSpan;
-import com.github.kristofa.brave.http.DefaultSpanNameProvider;
-import com.github.kristofa.brave.httpclient.BraveHttpRequestInterceptor;
-import com.github.kristofa.brave.httpclient.BraveHttpResponseInterceptor;
+import com.redhat.developers.msa.ola.tracing.OlaHttpRequestInterceptor;
+import com.redhat.developers.msa.ola.tracing.OlaHttpResponseInterceptor;
+import com.redhat.developers.msa.ola.tracing.TracerResolver;
 
 import feign.Logger;
 import feign.Logger.Level;
 import feign.httpclient.ApacheHttpClient;
 import feign.hystrix.HystrixFeign;
 import feign.jackson.JacksonDecoder;
+import io.opentracing.Span;
+import io.opentracing.SpanContext;
+import io.opentracing.Tracer;
 import io.swagger.annotations.ApiOperation;
 
 @RestController
 @RequestMapping("/api")
 public class OlaController {
-
-    @Autowired
-    private Brave brave;
+    private final Tracer tracer = TracerResolver.getTracer();
 
     @CrossOrigin
     @RequestMapping(method = RequestMethod.GET, value = "/ola", produces = "text/plain")
@@ -104,22 +102,46 @@ public class OlaController {
      * @return The feign pointing to the service URL and with Hystrix fallback.
      */
     private HolaService getNextService() {
-        // This stores the Original/Parent ServerSpan from ZiPkin.
-        final ServerSpan serverSpan = brave.serverSpanThreadBinder().getCurrentServerSpan();
-        final CloseableHttpClient httpclient =
-            HttpClients.custom()
-                .addInterceptorFirst(new BraveHttpRequestInterceptor(brave.clientRequestInterceptor(), new DefaultSpanNameProvider()))
-                .addInterceptorFirst(new BraveHttpResponseInterceptor(brave.clientResponseInterceptor()))
+        HttpServletRequest servletRequest = ((ServletRequestAttributes) RequestContextHolder.currentRequestAttributes()).getRequest();
+        Span parentSpan = (Span) servletRequest.getAttribute("tracing.requestSpan");
+
+        final CloseableHttpClient httpclient;
+        Span span = tracer.buildSpan("GET").asChildOf(parentSpan).start();
+        httpclient = HttpClients.custom()
+                .addInterceptorFirst(new OlaHttpRequestInterceptor(span))
+                .addInterceptorFirst(new OlaHttpResponseInterceptor(span))
                 .build();
+
         return HystrixFeign.builder()
-            // Use apache HttpClient which contains the ZipKin Interceptors
-            .client(new ApacheHttpClient(httpclient))
-            // Bind Zipkin Server Span to Feign Thread
-            .requestInterceptor((t) -> brave.serverSpanThreadBinder().setCurrentSpan(serverSpan))
-            .logger(new Logger.ErrorLogger()).logLevel(Level.BASIC)
-            .decoder(new JacksonDecoder())
-            .target(HolaService.class, "http://hola:8080/",
-                () -> Collections.singletonList("Hola response (fallback)"));
+                .logger(new Logger.ErrorLogger()).logLevel(Level.BASIC)
+                .client(new ApacheHttpClient(httpclient))
+                .decoder(new JacksonDecoder())
+                .target(HolaService.class, holaServiceUrl(), () -> Collections.singletonList("Hola response (fallback)"));
     }
 
+    /**
+     * Returns the base URL for the Hola service.
+     * @return  the base URL for the Hola Service
+     */
+    private static String holaServiceUrl() {
+        // we have two possibilities here:
+        // the first is to let OpenShift tell us passively what is the HOLA host and port, via the
+        // HOLA_SERVICE_HOST / HOLA_SERVICE_PORT env vars. These are set by OpenShift for a service named `hola`, so,
+        // we don't need to set it anywhere ourselves.
+        // If we want to override that, or if we are not running on OpenShift, the HOLA_SERVER_URL can be used, which
+        // overrides the OpenShift ones.
+
+        String url = System.getenv("HOLA_SERVER_URL");
+        if (null == url || url.isEmpty()) {
+            String host = System.getenv("HOLA_SERVICE_HOST");
+            String port = System.getenv("HOLA_SERVICE_PORT");
+            if (null == host) {
+                // at this point, we have no env vars at all, so, we default to "something".
+                url = "http://hola:8080/";
+            } else {
+                url = String.format("http://%s:%s", host, port);
+            }
+        }
+        return url;
+    }
 }
