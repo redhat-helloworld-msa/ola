@@ -15,7 +15,7 @@ Build and Deploy ola locally
 3. The application will be running at the following URL: <http://localhost:8080/api/ola>
 
 
-Deploy the application in Openshift
+Deploy the application in OpenShift
 -----------------------------------
 
 1. Make sure to be connected to the Docker Daemon
