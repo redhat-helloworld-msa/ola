@@ -5,7 +5,7 @@ def builderImage = 'maven:latest'
 
 node () {
     def builder = docker.image(builderImage)
-    builder.pull() // make sure we have the latest available from Docker Hub
+    builder.pull()
 
     stage ('Checkout'){
         echo 'Checking out git repository'
