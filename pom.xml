@@ -14,7 +14,8 @@
 	See the License for the specific language governing permissions and
 	limitations under the License.
 -->
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
 	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
 	<modelVersion>4.0.0</modelVersion>
 
@@ -120,11 +121,21 @@
 			<version>${io.opentracing.contrib.spring.autoconfigure.version}</version>
 		</dependency>
 
-		<!-- OpenTracing implementation - Jaeger -->
+		<!-- OpenTracing -->
 		<dependency>
-			<groupId>com.uber.jaeger</groupId>
-			<artifactId>jaeger-core</artifactId>
-			<version>${version.jaeger}</version>
+			<groupId>io.opentracing</groupId>
+			<artifactId>opentracing-api</artifactId>
+			<version>0.33.0</version>
+		</dependency>
+		<dependency>
+			<groupId>io.opentracing</groupId>
+			<artifactId>opentracing-util</artifactId>
+			<version>0.33.0</version>
+		</dependency>
+		<dependency>
+			<groupId>io.jaegertracing</groupId>
+			<artifactId>jaeger-client</artifactId>
+			<version>1.8.1</version>
 		</dependency>
 
 		<!-- Swagger -->
@@ -153,44 +164,6 @@
 			<plugin>
 				<groupId>org.springframework.boot</groupId>
 				<artifactId>spring-boot-maven-plugin</artifactId>
-			</plugin>
-			<plugin>
-				<groupId>io.fabric8</groupId>
-				<artifactId>fabric8-maven-plugin</artifactId>
-				<version>3.5.30</version>
-				<configuration>
-					<resources>
-						<labels>
-							<all>
-								<property>
-									<name>app</name>
-									<value>ola</value>
-								</property>
-								<property>
-									<name>hystrix.enabled</name>
-									<value>true</value>
-								</property>
-							</all>
-						</labels>
-					</resources>
-					<enricher>
-						<config>
-							<spring-boot-health-check>
-								<port>4444</port>
-							</spring-boot-health-check>
-						</config>
-					</enricher>
-				</configuration>
-				<executions>
-					<execution>
-						<id>fmp</id>
-						<goals>
-							<goal>resource</goal>
-							<goal>helm</goal>
-							<goal>build</goal>
-						</goals>
-					</execution>
-				</executions>
 			</plugin>
 		</plugins>
 	</build>
